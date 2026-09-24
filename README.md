@@ -1,0 +1,2 @@
+# ruokalista
+viikinnormaalikoulun ruokalista 
