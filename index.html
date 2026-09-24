@@ -85,7 +85,7 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <div class="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
           <i data-lucide="filter" class="w-4 h-4 text-brand-600"></i>
-          <span>Korosta ruokavalio kaverille:</span>
+          <span>suodatin:</span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button onclick="toggleDietFilter('L')" id="diet-L" class="diet-btn px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition">Laktoositon (L)</button>
@@ -166,12 +166,19 @@
           </div>
         </div>
 
-        <div class="flex gap-3 pt-2">
-          <button onclick="closeRatingModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium text-sm">
-            Peruuta
-          </button>
-          <button onclick="saveRating()" class="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-sm">
-            Tallenna arvio
+        <div class="flex flex-col gap-2 pt-2">
+          <div class="flex gap-3">
+            <button onclick="closeRatingModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium text-sm">
+              Peruuta
+            </button>
+            <button onclick="saveRating()" class="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-sm">
+              Tallenna arvio
+            </button>
+          </div>
+          
+          <button id="delete-rating-btn" onclick="deleteRating()" class="hidden w-full py-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 font-semibold text-xs transition flex items-center justify-center gap-1.5">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span>Poista oma arvio</span>
           </button>
         </div>
       </div>
@@ -198,10 +205,8 @@
 
     const SAMPLE_XML_WEEK1 = `<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel><item><title>ma 21.9.2026</title><description><![CDATA[Lounas:Lihapyörykät (L, M, MU), Ruskeakastike (L, G, M, MU), Keitetyt perunat (L, G, M, MU)<br><br>Kasvislounas:Säkylän kasvispyörykät (L, G, M, MU), Ruskeakastike (L, G, M, MU), Keitetyt perunat (L, G, M, MU)]]></description></item><item><title>ti 22.9.2026</title><description><![CDATA[Lounas:Butter Chicken (L, G, M, MU), Tummaa riisiä (L, G, M, MU)<br><br>Kasvislounas:Vegaaninen buttertofu (L, G, M, MU), Kylmä tofukastike (L, G, M, MU), Tummaa riisiä (L, G, M, MU)]]></description></item></channel></rss>`;
 
-    // --- PAREMPI PARSERI (EI PILKO ERITYISRUOKAVALIOITA OMIKSI RIVEIKSI) ---
     function splitDishesSmart(text) {
       if (!text || text === "Ei tietoa") return [];
-      
       const dishes = [];
       let current = '';
       let insideParen = false;
@@ -219,7 +224,6 @@
         }
       }
       if (current.trim().length > 0) dishes.push(current.trim());
-
       return dishes;
     }
 
@@ -309,11 +313,14 @@
       document.getElementById('modal-dish-title').textContent = `Arvioi: ${dishClean}`;
       const myRatings = getMyRatings();
       const existing = myRatings[activeDishKey];
+      const deleteBtn = document.getElementById('delete-rating-btn');
 
       if (existing) {
         currentRatings = { maku: existing.maku, rakenne: existing.rakenne, ulkonako: existing.ulkonako };
+        deleteBtn.classList.remove('hidden');
       } else {
         currentRatings = { maku: 3, rakenne: 3, ulkonako: 3 };
+        deleteBtn.classList.add('hidden');
       }
 
       renderModalStars();
@@ -383,6 +390,32 @@
       else renderMenuCards();
     }
 
+    function deleteRating() {
+      if (!activeDishKey) return;
+
+      const myRatings = getMyRatings();
+      const sharedRatings = getSharedRatings();
+
+      if (myRatings[activeDishKey]) {
+        delete myRatings[activeDishKey];
+        localStorage.setItem(MY_RATINGS_KEY, JSON.stringify(myRatings));
+      }
+
+      if (sharedRatings[activeDishKey] && sharedRatings[activeDishKey].length > 0) {
+        sharedRatings[activeDishKey].pop();
+        if (sharedRatings[activeDishKey].length === 0) {
+          delete sharedRatings[activeDishKey];
+        }
+        localStorage.setItem(SHARED_RATINGS_KEY, JSON.stringify(sharedRatings));
+      }
+
+      closeRatingModal();
+      showToast(`Oma arvio poistettu!`);
+
+      if (currentTab === 'archive') renderArchiveView();
+      else renderMenuCards();
+    }
+
     function createDishItemHtml(dishFullName, dateStr) {
       const dishClean = cleanDishName(dishFullName);
       const dishKey = dishClean.toLowerCase();
@@ -392,12 +425,21 @@
       const myRating = myRatings[dishKey];
       const isRatable = canRateDate(dateStr);
 
-      // Tarkistetaan täyttääkö valitun ruokavalion
       let isDietMatch = false;
       if (selectedDiet) {
         const dietRegex = new RegExp(`\\b${selectedDiet}\\b`, 'i');
         if (dietRegex.test(dishFullName)) {
           isDietMatch = true;
+        }
+      }
+
+      // Tyyliluokat sopivuuden mukaan (ei "Sopi"-lappua, vain tausta/sumennus)
+      let itemStyleClass = "p-2 rounded-xl transition-all duration-200 border-b border-slate-100 dark:border-slate-700/50 last:border-0 my-1";
+      if (selectedDiet) {
+        if (isDietMatch) {
+          itemStyleClass += " bg-emerald-50/80 dark:bg-emerald-950/40 border-l-4 border-l-emerald-500 dark:border-l-emerald-400 shadow-xs scale-[1.01]";
+        } else {
+          itemStyleClass += " opacity-30 blur-[1.5px] pointer-events-none select-none";
         }
       }
 
@@ -411,15 +453,10 @@
       let myTagHtml = myRating ? `<span class="text-[10px] bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-semibold px-1.5 py-0.5 rounded">Oma: ${myRating.avg}★</span>` : '';
 
       return `
-        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700/50 last:border-0 gap-2 ${
-          selectedDiet && !isDietMatch ? 'opacity-40' : ''
-        }">
+        <div class="flex items-center justify-between gap-2 ${itemStyleClass}">
           <div class="flex flex-col">
-            <div class="flex items-center gap-1.5">
-              <span class="text-xs font-medium text-slate-800 dark:text-slate-200">${dishFullName}</span>
-              ${selectedDiet && isDietMatch ? `<span class="text-[9px] font-extrabold bg-emerald-500 text-white px-1.5 py-0.2 rounded-full">Sopi: ${selectedDiet}</span>` : ''}
-            </div>
-            <div class="flex items-center gap-2 mt-0.5">
+            <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">${dishFullName}</span>
+            <div class="flex items-center gap-2 mt-1">
               ${badgeHtml}
               ${myTagHtml}
             </div>
@@ -430,7 +467,7 @@
             ${!isRatable ? 'disabled' : ''}
             class="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-lg transition ${
               isRatable 
-                ? 'bg-slate-100 dark:bg-slate-700 hover:bg-amber-500 hover:text-white text-slate-700 dark:text-slate-200' 
+                ? 'bg-slate-200 dark:bg-slate-700 hover:bg-amber-500 hover:text-white text-slate-700 dark:text-slate-200' 
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-50 cursor-not-allowed'
             }">
             ${myRating ? 'Muokkaa' : 'Arvioi'}
@@ -460,9 +497,9 @@
           ${isToday ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-brand-500 text-white">TÄNÄÄN</span>` : ''}
         </div>
 
-        <div class="p-5 flex-1 flex flex-col gap-4">
+        <div class="p-4 flex-1 flex flex-col gap-4">
           <div>
-            <div class="flex items-center gap-1.5 text-xs font-bold uppercase text-amber-600 dark:text-amber-400 mb-1">
+            <div class="flex items-center gap-1.5 text-xs font-bold uppercase text-amber-600 dark:text-amber-400 mb-1 px-1">
               <i data-lucide="utensils-crossed" class="w-3.5 h-3.5"></i>
               <span>Lounas</span>
             </div>
@@ -474,7 +511,7 @@
           <div class="h-px bg-slate-100 dark:bg-slate-700/60 my-0.5"></div>
 
           <div>
-            <div class="flex items-center gap-1.5 text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400 mb-1">
+            <div class="flex items-center gap-1.5 text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400 mb-1 px-1">
               <i data-lucide="leaf" class="w-3.5 h-3.5"></i>
               <span>Kasvislounas</span>
             </div>
@@ -507,7 +544,6 @@
             const stats = getDishStats(key);
             const my = myRatings[key];
 
-            // Poimitaan allergeenit sulkeista
             const match = dishFull.match(/\(([^)]+)\)/);
             const diets = match ? match[1] : '';
 
