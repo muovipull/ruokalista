@@ -1,153 +1,276 @@
 import os
 import csv
+import json
 import re
-import xml.etree.ElementTree as ET
-from flask import Flask, Response, jsonify, send_from_directory
+from datetime import datetime, timedelta
 import requests
-from apscheduler.schedulers.background import BackgroundScheduler
+from flask import Flask, Response, jsonify, send_from_directory, request
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__, static_folder='.')
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-AROMI_BASE_URL = "https://aromimenu.cgisaas.fi/ISSAromieMenus/FI/Default/iss/HKIViikinNormaalikoulu/api/Common/Restaurant/GetRssFeed/2d1d4df3-5ab7-46e2-b634-87446c067a6f"
-CSV_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ruokalista_arkisto.csv")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'database.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+class DishRating(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    dish_key = db.Column(db.String(150), index=True, nullable=False)
+    maku = db.Column(db.Integer, nullable=False)
+    rakenne = db.Column(db.Integer, nullable=False)
+    ulkonako = db.Column(db.Integer, nullable=False)
+    avg = db.Column(db.Float, nullable=False)
+
+with app.app_context():
+    db.create_all()
+
+URL_MEALS = "https://aromimenu.cgisaas.fi/ISSAromieMenus/FI/Default/iss/HKIViikinNormaalikoulu/api/Common/Restaurant/RestaurantMeals"
+URL_NUTRIENTS = "https://aromimenu.cgisaas.fi/ISSAromieMenus/FI/Default/iss/HKIViikinNormaalikoulu/api/Common/Restaurant/GetRestaurentMealNutrients"
+MENU_CSV_PATH = os.path.join(BASE_DIR, "viikon_ruokalista_cache.csv")
+
+API_PAYLOAD = {
+    "Id": "2d1d4df3-5ab7-46e2-b634-87446c067a6f",
+    "DinerGroupId": "4b2787ff-dc7c-4186-9eeb-36ba9574bf96",
+    "NutrientGroupId": "0ea0ee0d-22c9-4e49-8a7b-8de201ddaf84",
+    "DietGroupId": "63062e9f-93a0-41d4-8e87-260d3247c5f6",
+    "FilterDietGroupId": "63062e9f-93a0-41d4-8e87-260d3247c5f6",
+    "DietId": None,
+    "ConceptId": None,
+    "Name": "HY Alakoulu",
+    "Code": "HY Alakoulu",
+    "RestaurantId": "08201621-be48-4c4c-a3d1-df7ef9a58d1d",
+    "UniqueCode": "HY Alakoulu",
+    "IndexNumber": 83,
+    "NameOrCode": "HY Alakoulu",
+    "WeekDays": ["1", "2", "3", "4", "5"],
+    "WeekDay0": False,
+    "WeekDay1": True,
+    "WeekDay2": True,
+    "WeekDay3": True,
+    "WeekDay4": True,
+    "WeekDay5": True,
+    "WeekDay6": False,
+    "DietType": None,
+    "IsActiveSuitability": False,
+    "SuitabilityDietIds": [],
+}
+
+API_HEADERS = {
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+}
 
 # ---------------------------------------------------------------------------
-# CSV-TALLENNUSLOGIIKKA
+# API-REITIT ARVOSTELUILLE JA MENUILLE (CSV-PYSYVÄISUUDELLA)
 # ---------------------------------------------------------------------------
 
-def ensure_csv_exists():
-    """Luo CSV-tiedoston otsikkorivin, jos tiedostoa ei ole vielä olemassa."""
-    if not os.path.exists(CSV_FILE_PATH):
-        with open(CSV_FILE_PATH, mode="w", encoding="utf-8-sig", newline="") as f:
-            writer = csv.writer(f, delimiter=";")
-            writer.writerow(["Päivämäärä", "Päivä", "Lounas", "Kasvislounas"])
+@app.route('/api/ratings', methods=['GET'])
+def get_all_ratings():
+    ratings = DishRating.query.all()
+    grouped = {}
+    for r in ratings:
+        if r.dish_key not in grouped:
+            grouped[r.dish_key] = []
+        grouped[r.dish_key].append({"maku": r.maku, "rakenne": r.rakenne, "ulkonako": r.ulkonako})
+    return jsonify(grouped)
 
-def get_existing_dates_from_csv():
-    """Lukee CSV:ssä jo olevat päivämäärät duplikaattien välttämiseksi."""
-    ensure_csv_exists()
-    dates = set()
-    with open(CSV_FILE_PATH, mode="r", encoding="utf-8-sig") as f:
-        reader = csv.reader(f, delimiter=";")
-        next(reader, None)  # Ohitetaan otsikkorivi
-        for row in reader:
-            if row:
-                dates.add(row[0].strip())
-    return dates
-
-def save_rss_items_to_csv(xml_content):
-    """Parsii RSS XML-datan ja lisää uudet päiväkohtaiset ruoat CSV-tiedostoon."""
-    try:
-        root = ET.fromstring(xml_content)
-        existing_dates = get_existing_dates_from_csv()
-        new_rows = []
-
-        for item in root.findall('.//item'):
-            title_elem = item.find('title')
-            desc_elem = item.find('description')
-            
-            if title_elem is None or title_elem.text is None:
-                continue
-
-            full_title = title_elem.text.strip()
-            desc = desc_elem.text if (desc_elem is not None and desc_elem.text) else ''
-
-            # Eristetään päivämäärä (esim. "21.9.2026")
-            date_match = re.search(r'\d+\.\d+\.\d+', full_title)
-            date_str = date_match.group(0) if date_match else full_title
-
-            # Jos päivä on jo tallennettu arkistoon, skipataan
-            if date_str in existing_dates:
-                continue
-
-            # Parsitaan Lounas ja Kasvislounas description-kentästä
-            parts = desc.split('<br><br>')
-            lounas = ""
-            kasvislounas = ""
-
-            for part in parts:
-                p_clean = part.replace('<br>', ' ').strip()
-                if p_clean.startswith("Lounas:"):
-                    lounas = p_clean.replace("Lounas:", "").strip()
-                elif p_clean.startswith("Kasvislounas:"):
-                    kasvislounas = p_clean.replace("Kasvislounas:", "").strip()
-                else:
-                    if not lounas:
-                        lounas = p_clean
-                    elif not kasvislounas:
-                        kasvislounas = p_clean
-
-            new_rows.append([date_str, full_title, lounas, kasvislounas])
-            existing_dates.add(date_str)
-
-        # Kirjoitetaan uudet rivit CSV-tiedostoon
-        if new_rows:
-            with open(CSV_FILE_PATH, mode="a", encoding="utf-8-sig", newline="") as f:
-                writer = csv.writer(f, delimiter=";")
-                writer.writerows(new_rows)
-            app.logger.info(f"Tallennettu {len(new_rows)} uutta ruokalistapäivää CSV-arkistoon.")
-
-    except Exception as e:
-        app.logger.error(f"Virhe CSV-tallennuksessa: {e}")
-
-def update_all_weeks_job():
-    """Ajastettu tehtävä: Hakee viikkojen 1, 2 ja 3 syötteet ja tallentaa ne CSV-tiedostoon."""
-    app.logger.info("Suoritetaan automaattinen ruokalistojen taustapäivitys (CSV)...")
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+@app.route('/api/ratings', methods=['POST'])
+def post_rating():
+    data = request.json
+    dish_key = data.get('dish_key', '').lower().strip()
+    maku = int(data.get('maku', 3))
+    rakenne = int(data.get('rakenne', 3))
+    ulkonako = int(data.get('ulkonako', 3))
     
-    for week in [1, 2, 3]:
-        url = f"{AROMI_BASE_URL}/{week}"
+    if not dish_key:
+        return jsonify({"error": "Virheellinen ruoan nimi"}), 400
+
+    avg = round((maku + rakenne + ulkonako) / 3, 1)
+    new_rating = DishRating(dish_key=dish_key, maku=maku, rakenne=rakenne, ulkonako=ulkonako, avg=avg)
+    db.session.add(new_rating)
+    db.session.commit()
+
+    return jsonify({"success": True, "avg": avg})
+
+@app.route('/api/weekly-menu', methods=['GET'])
+def get_weekly_menu_api():
+    """Lukee ruokalistan CSV-tiedostosta. Jos tiedostoa ei ole, hakee API:sta ja tallentaa CSV:hen."""
+    
+    # 1. Jos CSV-tiedosto on olemassa, ladataan tiedot suoraan sieltä!
+    if os.path.exists(MENU_CSV_PATH):
         try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                save_rss_items_to_csv(resp.content)
+            structured_menu = []
+            with open(MENU_CSV_PATH, mode='r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f, delimiter=';')
+                header = next(reader, None) # Ohitetaan otsikkorivi
+                for row in reader:
+                    if len(row) >= 4:
+                        menu_date, date_str, meal_name, json_data_str = row[0], row[1], row[2], row[3]
+                        meals_data = json.loads(json_data_str)
+                        
+                        # Ryhmitellään päivämäärän mukaan
+                        existing_day = next((d for d in structured_menu if d["date"] == date_str), None)
+                        if existing_day:
+                            existing_day["meals"].append({"meal_name": meal_name, "dishes": meals_data})
+                        else:
+                            structured_menu.append({
+                                "menu_date": menu_date,
+                                "date": date_str,
+                                "meals": [{"meal_name": meal_name, "dishes": meals_data}]
+                            })
+            return jsonify(structured_menu)
         except Exception as e:
-            app.logger.error(f"Taustapäivitys epäonnistui viikolle {week}: {e}")
+            app.logger.error(f"Virhe CSV-luennassa: {e}")
 
-# ---------------------------------------------------------------------------
-# TAUSTAAJAJASTIN (APScheduler)
-# ---------------------------------------------------------------------------
+    # 2. Jos tiedostoa ei ole, haetaan tiedot Aromimenun API:sta
+    today = datetime.now()
+    start_of_week = today - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=4)
 
-scheduler = BackgroundScheduler(daemon=True)
-# Ajetaan automaattisesti 1 tunnin välein (3600s)
-scheduler.add_job(update_all_weeks_job, 'interval', hours=1)
-scheduler.start()
+    params_meals = {
+        "Id": "08201621-be48-4c4c-a3d1-df7ef9a58d1d",
+        "StartDate": start_of_week.strftime("%Y-%m-%dT00:00:00.000Z"),
+        "EndDate": end_of_week.strftime("%Y-%m-%dT23:59:59.000Z"),
+    }
 
-# Ajetaan ensimmäinen haku heti kun sovellus käynnistyy
-update_all_weeks_job()
+    try:
+        response = requests.post(URL_MEALS, params=params_meals, json=API_PAYLOAD, headers=API_HEADERS, timeout=10)
+        if response.status_code != 200:
+            return jsonify({"error": "Virhe ruokalistan haussa"}), response.status_code
 
-# ---------------------------------------------------------------------------
-# FLASK REITTIOHJAUKSET (ENDPOINTS)
-# ---------------------------------------------------------------------------
+        days_data = response.json()
+        structured_menu = []
+        csv_rows = []
+        pork_keywords = ["possu", "porsas", "sika", "kinkku", "pekoni"]
+
+        for day in days_data:
+            menu_date = day.get("MenuDate", "Tuntematon pvm")
+            raw_date = day.get("Date", "").split("T")[0]
+            day_entry = {"menu_date": menu_date, "date": raw_date, "meals": []}
+
+            meals = day.get("Meals", [])
+            for meal in meals:
+                meal_name = meal.get("MealName", "Lounas")
+                meal_id = meal.get("MealId")
+
+                dt_obj = datetime.strptime(raw_date, "%Y-%m-%d") - timedelta(days=1)
+                date_offset = dt_obj.strftime("%Y-%m-%dT22:00:00.000Z")
+
+                params_nutrients = {
+                    "Id": "08201621-be48-4c4c-a3d1-df7ef9a58d1d",
+                    "StartDateOffset": date_offset,
+                    "EndDateOffset": date_offset,
+                    "orgCultureId": "4286d1a6-3f4d-469a-8219-a72d3e84b9f1",
+                    "showNutritional": "true",
+                    "mealId": meal_id,
+                }
+
+                dishes_list = []
+                try:
+                    nutr_res = requests.post(URL_NUTRIENTS, params=params_nutrients, json=API_PAYLOAD, headers=API_HEADERS, timeout=5)
+                    if nutr_res.status_code == 200:
+                        nutr_data = nutr_res.json()
+                        if nutr_data:
+                            for item in nutr_data:
+                                dish_title = item.get("Dish", "N/A")
+                                ingredients = item.get("IngredientName", "Ei ainesosia saatavilla")
+                                contains_pork = any(kw in ingredients.lower() for kw in pork_keywords)
+
+                                nutrients = item.get("Nutrients", [])
+                                nutrient_summary = []
+                                for n in nutrients[:4]:
+                                    name = n.get("NutrientWithPad", "").replace("<span>", "").replace("</span>", "")
+                                    val = n.get("NutrientWithUnit", "")
+                                    nutrient_summary.append({"name": name, "value": val})
+
+                                dishes_list.append({
+                                    "dish": dish_title,
+                                    "ingredients": ingredients,
+                                    "contains_pork": contains_pork,
+                                    "nutrients": nutrient_summary
+                                })
+                except Exception:
+                    pass
+
+                day_entry["meals"].append({
+                    "meal_name": meal_name,
+                    "dishes": dishes_list
+                })
+
+                # Tallennetaan rivi CSV-taulukkoon (muunnetaan listat JSON-merkkijonoksi)
+                csv_rows.append([menu_date, raw_date, meal_name, json.dumps(dishes_list, ensure_ascii=False)])
+
+            structured_menu.append(day_entry)
+
+        # Kirjoitetaan tiedot pysyvästi CSV-tiedostoon
+        with open(MENU_CSV_PATH, mode='w', encoding='utf-8-sig', newline='') as f:
+            writer = csv.writer(f, delimiter=';')
+            writer.writerow(["MenuDate", "Date", "MealName", "DishesJson"])
+            writer.writerows(csv_rows)
+
+        return jsonify(structured_menu)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/watch/today', methods=['GET'])
+def get_watch_today():
+    """Palauttaa vain tämän päivän ruoat ja possutiedot kellonäyttöä varten."""
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    # Tarkistetaan löytyykö CSV-välimuisti
+    if not os.path.exists(MENU_CSV_PATH):
+        return jsonify({"error": "Ei ruokalistaa saatavilla"}), 404
+
+    try:
+        today_meals = []
+        has_pork = False
+
+        with open(MENU_CSV_PATH, mode='r', encoding='utf-8-sig') as f:
+            reader = csv.reader(f, delimiter=';')
+            next(reader, None) # Ohitetaan otsikko
+            for row in reader:
+                if len(row) >= 4 and row[1] == today_str:
+                    meal_name, dishes_json = row[2], row[3]
+                    dishes = json.loads(dishes_json)
+                    
+                    meal_dishes = []
+                    for d in dishes:
+                        meal_dishes.append(d["dish"])
+                        if d["contains_pork"]:
+                            has_pork = True
+                    
+                    today_meals.append({
+                        "meal_name": meal_name,
+                        "dishes": meal_dishes
+                    })
+
+        if not today_meals:
+            # Jos tälle päivälle ei löydy suoraan (esim. viikonloppu), näytetään joku tai ilmoitus
+            return jsonify({
+                "date": today_str,
+                "message": "Ei ruokailua tänään.",
+                "has_pork": False,
+                "meals": []
+            })
+
+        return jsonify({
+            "date": today_str,
+            "has_pork": has_pork,
+            "meals": today_meals
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/watch')
+def serve_watch():
+    return send_from_directory('.', 'watch.html')
 
 @app.route('/')
 def serve_index():
     return send_from_directory('.', 'index.html')
-
-@app.route('/api/rss/<int:week_id>')
-def get_rss_feed(week_id):
-    if week_id not in [1, 2, 3]:
-        return jsonify({"error": "Virheellinen viikko. Sallitut arvot: 1, 2, 3"}), 400
-
-    target_url = f"{AROMI_BASE_URL}/{week_id}"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-
-    try:
-        response = requests.get(target_url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            # Tallennetaan samalla CSV-arkistoon selaimen tehdessä pyynnön
-            save_rss_items_to_csv(response.content)
-            return Response(response.content, content_type='application/rss+xml; charset=utf-8')
-        else:
-            return jsonify({"error": f"AromiMenu palautti virheen: {response.status_code}"}), response.status_code
-    except Exception as e:
-        app.logger.error(f"Virhe haettaessa syötettä osoitteesta {target_url}: {e}")
-        return jsonify({"error": "Virhe yhteydessä AromiMenu-palvelimeen"}), 500
-
-@app.route('/api/archive/csv')
-def download_csv():
-    """Rajapinta, jolla CSV-tiedosto voidaan ladata suoraan selaimeen."""
-    ensure_csv_exists()
-    return send_from_directory('.', 'ruokalista_arkisto.csv', as_attachment=True)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

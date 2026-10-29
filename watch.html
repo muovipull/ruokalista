@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kouluruoka - Kellonäkymä</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; }
+  </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 text-center">
+
+  <div class="w-full max-w-xs space-y-6">
+    <!-- Päivämäärä / Otsikko -->
+    <div>
+      <span id="date-label" class="text-xs font-bold uppercase tracking-widest text-slate-400">Tänään</span>
+      <h1 class="text-xl font-black text-brand-400 mt-1">Koululounas</h1>
+    </div>
+
+    <!-- Pääruoka isolla -->
+    <div id="dishes-container" class="bg-slate-800/80 border border-slate-700 p-6 rounded-3xl shadow-2xl space-y-4">
+      <div class="animate-pulse text-sm text-slate-400">Ladataan ruokaa...</div>
+    </div>
+
+    <!-- Possuvaroitus -->
+    <div id="pork-badge" class="hidden py-3 px-4 rounded-2xl bg-rose-950/80 border border-rose-800 text-rose-300 font-extrabold text-sm tracking-wide uppercase shadow-lg">
+      ⚠️ Sisältää possua!
+    </div>
+    
+    <div id="no-pork-badge" class="hidden py-3 px-4 rounded-2xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 font-extrabold text-sm tracking-wide uppercase shadow-lg">
+      🌱 Ei sisällä possua
+    </div>
+  </div>
+
+  <script>
+    async function loadWatchData() {
+      try {
+        const res = await fetch('/api/watch/today');
+        const data = await res.json();
+        
+        const container = document.getElementById('dishes-container');
+        const porkBadge = document.getElementById('pork-badge');
+        const noPorkBadge = document.getElementById('no-pork-badge');
+
+        if (data.message || !data.meals || data.meals.length === 0) {
+          container.innerHTML = `<p class="text-lg font-bold text-slate-300">${data.message || "Ei ruokaa tänään."}</p>`;
+          return;
+        }
+
+        let html = '';
+        data.meals.forEach(m => {
+          html += `
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block mb-1">${m.meal_name}</span>
+              <div class="text-2xl font-black text-white leading-tight">${m.dishes.join('<br>')}</div>
+            </div>
+          `;
+        });
+
+        container.innerHTML = html;
+
+        if (data.has_pork) {
+          porkBadge.classList.remove('hidden');
+          noPorkBadge.classList.add('hidden');
+        } else {
+          noPorkBadge.classList.remove('hidden');
+          porkBadge.classList.add('hidden');
+        }
+
+      } catch (err) {
+        document.getElementById('dishes-container').innerHTML = `<p class="text-sm text-rose-400">Yhteysvirhe palvelimeen.</p>`;
+      }
+    }
+
+    loadWatchData();
+  </script>
+</body>
+</html>

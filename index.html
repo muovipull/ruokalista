@@ -49,8 +49,10 @@
         <h1 class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mt-1">
           Koululounas & Ruoka-arvostelut
         </h1>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" id="update-status">
-          Päivitetään ruokalistatietoja...
+        <!-- TÄSSÄ NÄKYY TÄMÄN PÄIVÄN RUOKA YLÄPALKISSA -->
+        <p class="text-sm font-medium text-brand-600 dark:text-brand-400 mt-1 flex items-center gap-1.5" id="today-banner-dish">
+          <i data-lucide="calendar-days" class="w-4 h-4"></i>
+          <span>Ladataan tämän päivän ruokaa...</span>
         </p>
       </div>
 
@@ -62,7 +64,7 @@
         <button onclick="toggleTheme()" class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-sm">
           <i id="theme-icon" data-lucide="moon" class="w-5 h-5"></i>
         </button>
-        <button onclick="loadWeekData(currentWeekIndex)" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm transition shadow-sm">
+        <button onclick="loadMenuData()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm transition shadow-sm">
           <i data-lucide="rotate-cw" class="w-4 h-4"></i>
           <span>Päivitä</span>
         </button>
@@ -70,28 +72,16 @@
     </header>
 
     <section class="mt-6 flex flex-col gap-4">
-      <!-- Navigation Tabs -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 bg-slate-200/60 dark:bg-slate-800/80 rounded-2xl">
-        <button onclick="switchTab(1)" id="tab-week-1" class="main-tab py-2.5 px-3 rounded-xl font-medium text-sm text-center">Tämä viikko</button>
-        <button onclick="switchTab(2)" id="tab-week-2" class="main-tab py-2.5 px-3 rounded-xl font-medium text-sm text-center">Ensi viikko</button>
-        <button onclick="switchTab(3)" id="tab-week-3" class="main-tab py-2.5 px-3 rounded-xl font-medium text-sm text-center">Kahden viikon päästä</button>
-        <button onclick="switchTab('archive')" id="tab-archive" class="main-tab py-2.5 px-3 rounded-xl font-medium text-sm text-center flex items-center justify-center gap-1.5">
-          <i data-lucide="archive" class="w-4 h-4"></i>
-          <span>Arkisto (<span id="archive-count">0</span>)</span>
-        </button>
-      </div>
-
-      <!-- Ruokavalion korostussuodatin -->
+      <!-- Suodatin -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <div class="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
           <i data-lucide="filter" class="w-4 h-4 text-brand-600"></i>
-          <span>suodatin:</span>
+          <span>Suodata ruokavalion mukaan:</span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button onclick="toggleDietFilter('L')" id="diet-L" class="diet-btn px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition">Laktoositon (L)</button>
           <button onclick="toggleDietFilter('G')" id="diet-G" class="diet-btn px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition">Gluteeniton (G)</button>
           <button onclick="toggleDietFilter('M')" id="diet-M" class="diet-btn px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition">Maidoton (M)</button>
-          <button onclick="toggleDietFilter('MU')" id="diet-MU" class="diet-btn px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition">Munaton (MU)</button>
         </div>
       </div>
     </section>
@@ -106,9 +96,9 @@
     </div>
 
     <main class="mt-6">
-      <div id="loading-state" class="hidden py-16 text-center">
+      <div id="loading-state" class="py-16 text-center">
         <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-brand-500 border-t-transparent"></div>
-        <p class="mt-4 text-slate-500 font-medium text-sm">Haetaan ruokalistatietoja...</p>
+        <p class="mt-4 text-slate-500 font-medium text-sm">Haetaan ruokalistatietoja ja ravintoarvoja...</p>
       </div>
 
       <div id="menu-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
@@ -133,7 +123,6 @@
         </div>
 
         <div class="py-5 space-y-5">
-          <!-- 1. Maku -->
           <div>
             <div class="flex justify-between text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">
               <span>1. Maku</span>
@@ -142,7 +131,6 @@
             <div class="flex gap-2 text-amber-400" id="stars-maku"></div>
           </div>
 
-          <!-- 2. Rakenne -->
           <div>
             <div class="flex justify-between text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">
               <span>2. Rakenne</span>
@@ -151,7 +139,6 @@
             <div class="flex gap-2 text-amber-400" id="stars-rakenne"></div>
           </div>
 
-          <!-- 3. Ulkonäkö -->
           <div>
             <div class="flex justify-between text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">
               <span>3. Ulkonäkö</span>
@@ -185,51 +172,21 @@
     </div>
 
     <footer class="mt-12 pt-6 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
-      <p>Lähde: Viikin Normaalikoulu</p>
+      <p>Lähde: Viikin Normaalikoulu & Aromimenu API</p>
     </footer>
   </div>
 
   <script>
-    let currentTab = 1;
-    let currentWeekIndex = 1;
-    let currentWeekData = [];
+    let weeklyMenuData = [];
     let selectedDiet = null;
-    
     let activeDishKey = null;
     let currentRatings = { maku: 3, rakenne: 3, ulkonako: 3 };
+    
+    // Seurataan mitkä ruoat ovat auki (Näytä vähemmän / Näytä lisää)
+    let expandedDishes = {};
 
-    const STORAGE_KEY = 'viikki_ruokalista_archive_v3';
     const MY_RATINGS_KEY = 'viikki_my_dish_ratings_v2';
     const SHARED_RATINGS_KEY = 'viikki_shared_dish_ratings_v2';
-    const BASE_RSS_URL = "/api/rss/";
-
-    const SAMPLE_XML_WEEK1 = `<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel><item><title>ma 21.9.2026</title><description><![CDATA[Lounas:Lihapyörykät (L, M, MU), Ruskeakastike (L, G, M, MU), Keitetyt perunat (L, G, M, MU)<br><br>Kasvislounas:Säkylän kasvispyörykät (L, G, M, MU), Ruskeakastike (L, G, M, MU), Keitetyt perunat (L, G, M, MU)]]></description></item><item><title>ti 22.9.2026</title><description><![CDATA[Lounas:Butter Chicken (L, G, M, MU), Tummaa riisiä (L, G, M, MU)<br><br>Kasvislounas:Vegaaninen buttertofu (L, G, M, MU), Kylmä tofukastike (L, G, M, MU), Tummaa riisiä (L, G, M, MU)]]></description></item></channel></rss>`;
-
-    function splitDishesSmart(text) {
-      if (!text || text === "Ei tietoa") return [];
-      const dishes = [];
-      let current = '';
-      let insideParen = false;
-
-      for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        if (char === '(') insideParen = true;
-        if (char === ')') insideParen = false;
-
-        if (char === ',' && !insideParen) {
-          if (current.trim().length > 0) dishes.push(current.trim());
-          current = '';
-        } else {
-          current += char;
-        }
-      }
-      if (current.trim().length > 0) dishes.push(current.trim());
-      return dishes;
-    }
-
-    function cleanDishName(name) {
-      return name.replace(/\([^)]*\)/g, '').trim();
-    }
 
     function getMyRatings() {
       try {
@@ -241,13 +198,7 @@
     function getSharedRatings() {
       try {
         const raw = localStorage.getItem(SHARED_RATINGS_KEY);
-        if (raw) return JSON.parse(raw);
-        const initialShared = {
-          "keitetyt perunat": [{ maku: 4, rakenne: 5, ulkonako: 4 }],
-          "lihapyörykät": [{ maku: 4, rakenne: 4, ulkonako: 5 }]
-        };
-        localStorage.setItem(SHARED_RATINGS_KEY, JSON.stringify(initialShared));
-        return initialShared;
+        return raw ? JSON.parse(raw) : {};
       } catch (e) { return {}; }
     }
 
@@ -262,36 +213,18 @@
       const count = list.length;
       return {
         count,
-        avgM: (totalM / count).toFixed(1),
-        avgR: (totalR / count).toFixed(1),
-        avgU: (totalU / count).toFixed(1),
         totalAvg: (((totalM + totalR + totalU) / (count * 3))).toFixed(1)
       };
     }
 
-    function canRateDate(dateStr) {
-      if (!dateStr) return false;
-      const parts = dateStr.split('.');
-      if (parts.length !== 3) return true;
-      const cardDate = new Date(parts[2], parts[1] - 1, parts[0]);
-      const now = new Date();
-      now.setHours(23, 59, 59, 999);
-      return cardDate <= now;
-    }
-
     function toggleDietFilter(code) {
-      if (selectedDiet === code) {
-        selectedDiet = null;
-      } else {
-        selectedDiet = code;
-      }
+      selectedDiet = (selectedDiet === code) ? null : code;
       updateDietButtons();
-      if (currentTab === 'archive') renderArchiveView();
-      else renderMenuCards();
+      renderMenuCards();
     }
 
     function updateDietButtons() {
-      ['L', 'G', 'M', 'MU'].forEach(code => {
+      ['L', 'G', 'M'].forEach(code => {
         const btn = document.getElementById(`diet-${code}`);
         if (!btn) return;
         if (selectedDiet === code) {
@@ -302,15 +235,14 @@
       });
     }
 
-    function openRatingModal(dishFullName, dateStr) {
-      if (!canRateDate(dateStr)) {
-        alert("Voit arvioida ruokia vasta kun tarjoilupäivä on koittanut.");
-        return;
-      }
-      const dishClean = cleanDishName(dishFullName);
-      activeDishKey = dishClean.toLowerCase();
+    function toggleIngredients(dishId) {
+      expandedDishes[dishId] = !expandedDishes[dishId];
+      renderMenuCards();
+    }
 
-      document.getElementById('modal-dish-title').textContent = `Arvioi: ${dishClean}`;
+    function openRatingModal(dishName) {
+      activeDishKey = dishName.toLowerCase().trim();
+      document.getElementById('modal-dish-title').textContent = `Arvioi: ${dishName}`;
       const myRatings = getMyRatings();
       const existing = myRatings[activeDishKey];
       const deleteBtn = document.getElementById('delete-rating-btn');
@@ -368,8 +300,7 @@
         maku: currentRatings.maku,
         rakenne: currentRatings.rakenne,
         ulkonako: currentRatings.ulkonako,
-        avg: parseFloat(((currentRatings.maku + currentRatings.rakenne + currentRatings.ulkonako) / 3).toFixed(1)),
-        updatedAt: new Date().toISOString()
+        avg: parseFloat(((currentRatings.maku + currentRatings.rakenne + currentRatings.ulkonako) / 3).toFixed(1))
       };
 
       myRatings[activeDishKey] = newRating;
@@ -384,15 +315,12 @@
       localStorage.setItem(SHARED_RATINGS_KEY, JSON.stringify(sharedRatings));
 
       closeRatingModal();
-      showToast(`Arvio tallennettu ruoalle: ${activeDishKey}`);
-
-      if (currentTab === 'archive') renderArchiveView();
-      else renderMenuCards();
+      showToast("Arvio tallennettu!");
+      renderMenuCards();
     }
 
     function deleteRating() {
       if (!activeDishKey) return;
-
       const myRatings = getMyRatings();
       const sharedRatings = getSharedRatings();
 
@@ -403,173 +331,176 @@
 
       if (sharedRatings[activeDishKey] && sharedRatings[activeDishKey].length > 0) {
         sharedRatings[activeDishKey].pop();
-        if (sharedRatings[activeDishKey].length === 0) {
-          delete sharedRatings[activeDishKey];
-        }
+        if (sharedRatings[activeDishKey].length === 0) delete sharedRatings[activeDishKey];
         localStorage.setItem(SHARED_RATINGS_KEY, JSON.stringify(sharedRatings));
       }
 
       closeRatingModal();
-      showToast(`Oma arvio poistettu!`);
-
-      if (currentTab === 'archive') renderArchiveView();
-      else renderMenuCards();
+      showToast("Oma arvio poistettu!");
+      renderMenuCards();
     }
 
-    function createDishItemHtml(dishFullName, dateStr) {
-      const dishClean = cleanDishName(dishFullName);
-      const dishKey = dishClean.toLowerCase();
-      
-      const stats = getDishStats(dishKey);
-      const myRatings = getMyRatings();
-      const myRating = myRatings[dishKey];
-      const isRatable = canRateDate(dateStr);
+    function showToast(msg) {
+      const toast = document.getElementById('storage-toast');
+      document.getElementById('storage-toast-msg').textContent = msg;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 3000);
+    }
 
-      let isDietMatch = false;
-      if (selectedDiet) {
-        const dietRegex = new RegExp(`\\b${selectedDiet}\\b`, 'i');
-        if (dietRegex.test(dishFullName)) {
-          isDietMatch = true;
-        }
-      }
+    async function loadMenuData() {
+      document.getElementById('loading-state').classList.remove('hidden');
+      document.getElementById('menu-cards-container').innerHTML = '';
 
-      // Tyyliluokat sopivuuden mukaan (ei "Sopi"-lappua, vain tausta/sumennus)
-      let itemStyleClass = "p-2 rounded-xl transition-all duration-200 border-b border-slate-100 dark:border-slate-700/50 last:border-0 my-1";
-      if (selectedDiet) {
-        if (isDietMatch) {
-          itemStyleClass += " bg-emerald-50/80 dark:bg-emerald-950/40 border-l-4 border-l-emerald-500 dark:border-l-emerald-400 shadow-xs scale-[1.01]";
+      try {
+        const res = await fetch('/api/weekly-menu');
+        if (res.ok) {
+          weeklyMenuData = await res.json();
+          updateTodayBanner();
         } else {
-          itemStyleClass += " opacity-30 blur-[1.5px] pointer-events-none select-none";
+          throw new Error("Virhe haettaessa");
         }
+      } catch (err) {
+        document.getElementById('today-banner-dish').innerHTML = `<span class="text-rose-500">Virhe ladattaessa listaa palvelimelta.</span>`;
+      } finally {
+        document.getElementById('loading-state').classList.add('hidden');
+        renderMenuCards();
       }
-
-      let badgeHtml = stats ? `
-        <div class="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 px-2 py-0.5 rounded-lg text-xs">
-          <i data-lucide="star" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"></i>
-          <span class="font-bold text-amber-700 dark:text-amber-300">${stats.totalAvg}</span>
-          <span class="text-[10px] text-slate-400">(${stats.count})</span>
-        </div>` : `<span class="text-[11px] text-slate-400 italic">Ei arvioita</span>`;
-
-      let myTagHtml = myRating ? `<span class="text-[10px] bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-semibold px-1.5 py-0.5 rounded">Oma: ${myRating.avg}★</span>` : '';
-
-      return `
-        <div class="flex items-center justify-between gap-2 ${itemStyleClass}">
-          <div class="flex flex-col">
-            <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">${dishFullName}</span>
-            <div class="flex items-center gap-2 mt-1">
-              ${badgeHtml}
-              ${myTagHtml}
-            </div>
-          </div>
-          
-          <button 
-            onclick="openRatingModal('${dishFullName.replace(/'/g, "\\'")}', '${dateStr}')"
-            ${!isRatable ? 'disabled' : ''}
-            class="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-lg transition ${
-              isRatable 
-                ? 'bg-slate-200 dark:bg-slate-700 hover:bg-amber-500 hover:text-white text-slate-700 dark:text-slate-200' 
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-50 cursor-not-allowed'
-            }">
-            ${myRating ? 'Muokkaa' : 'Arvioi'}
-          </button>
-        </div>
-      `;
     }
 
-    function createCardElement(dayData) {
-      const isToday = dayData.isToday;
-      const card = document.createElement('div');
-      card.className = `flex flex-col bg-white dark:bg-slate-800 rounded-2xl border transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md ${
-        isToday ? 'ring-2 ring-brand-500 border-brand-500' : 'border-slate-200/80 dark:border-slate-700/70'
-      }`;
+    // Päivittää yläpalkkiin tämän päivän ruoan
+    function updateTodayBanner() {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayData = weeklyMenuData.find(d => d.date === todayStr);
+      
+      const bannerEl = document.getElementById('today-banner-dish');
+      if (!todayData || !todayData.meals || todayData.meals.length === 0) {
+        bannerEl.innerHTML = `<i data-lucide="calendar-days" class="w-4 h-4"></i><span>Tänään ei ole ruokalistatietoja (tai on viikonloppu).</span>`;
+      } else {
+        let dishNames = [];
+        todayData.meals.forEach(m => {
+          m.dishes.forEach(d => dishNames.push(d.dish));
+        });
+        bannerEl.innerHTML = `<i data-lucide="utensils" class="w-4 h-4 text-brand-600"></i><span class="font-bold text-slate-700 dark:text-slate-200">Tänään tarjolla:</span> <span class="text-brand-600 dark:text-brand-400 font-semibold">${dishNames.join(' &bull; ')}</span>`;
+      }
+      lucide.createIcons();
+    }
 
-      const lounasDishes = splitDishesSmart(dayData.lounas);
-      const kasvisDishes = splitDishesSmart(dayData.kasvislounas);
+    function renderMenuCards() {
+      const container = document.getElementById('menu-cards-container');
+      container.innerHTML = '';
 
-      card.innerHTML = `
-        <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between ${
-          isToday ? 'bg-brand-50/70 dark:bg-brand-950/30' : 'bg-slate-50/50 dark:bg-slate-800/50'
-        }">
-          <div>
-            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">${dayData.dateStr}</span>
-            <h2 class="text-lg font-bold text-slate-900 dark:text-white leading-tight">${dayData.dayName}</h2>
+      if (!weeklyMenuData || weeklyMenuData.length === 0) {
+        document.getElementById('empty-state').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('empty-state').classList.add('hidden');
+
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      weeklyMenuData.forEach((day, dayIndex) => {
+        const isToday = (day.date === todayStr);
+        const card = document.createElement('div');
+        card.className = `flex flex-col bg-white dark:bg-slate-800 rounded-2xl border transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md ${
+          isToday ? 'ring-2 ring-brand-500 border-brand-500' : 'border-slate-200/80 dark:border-slate-700/70'
+        }`;
+
+        let mealsHtml = '';
+        day.meals.forEach((meal, mealIndex) => {
+          let dishesHtml = '';
+          meal.dishes.forEach((item, itemIndex) => {
+            const stats = getDishStats(item.dish);
+            const myRatings = getMyRatings();
+            const myRating = myRatings[item.dish.toLowerCase().trim()];
+
+            let isDietMatch = true;
+            if (selectedDiet) {
+              isDietMatch = item.ingredients.toUpperCase().includes(selectedDiet);
+            }
+
+            let itemStyle = "p-3 rounded-xl border border-slate-100 dark:border-slate-700/50 mb-2 bg-slate-50/50 dark:bg-slate-900/30 transition";
+            if (selectedDiet && !isDietMatch) {
+              itemStyle += " opacity-30 blur-[1.5px] pointer-events-none";
+            }
+
+            let badgeHtml = stats ? `
+              <div class="flex items-center gap-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 px-2 py-0.5 rounded-lg text-xs">
+                <i data-lucide="star" class="w-3 h-3 fill-amber-400 text-amber-400"></i>
+                <span class="font-bold text-amber-700 dark:text-amber-300">${stats.totalAvg}</span>
+                <span class="text-[10px] text-slate-400">(${stats.count})</span>
+              </div>` : `<span class="text-[11px] text-slate-400 italic">Ei arvioita</span>`;
+
+            let myTag = myRating ? `<span class="text-[10px] bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-semibold px-1.5 py-0.5 rounded">Oma: ${myRating.avg}★</span>` : '';
+            let porkWarning = item.contains_pork ? `<span class="text-[10px] bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 font-bold px-1.5 py-0.5 rounded">⚠️ Sisältää possua</span>` : '';
+
+            // Ainesosien lyhennys- / laajennuslogiikka
+            const dishUniqueId = `d_${dayIndex}_${mealIndex}_${itemIndex}`;
+            const isExpanded = !!expandedDishes[dishUniqueId];
+            const fullIngr = item.ingredients || "Ei ainesosia saatavilla";
+            
+            let displayedIngredients = fullIngr;
+            let showToggleBtn = false;
+            if (fullIngr.length > 90) {
+              showToggleBtn = true;
+              displayedIngredients = isExpanded ? fullIngr : fullIngr.substring(0, 90) + "...";
+            }
+
+            // ENERGIA NÄKYY AINA (suoraan kortissa)
+            let nutrientsText = item.nutrients.map(n => `${n.name}: ${n.value}`).join(' | ');
+
+            dishesHtml += `
+              <div class="${itemStyle}">
+                <div class="flex items-start justify-between gap-2">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-100">${item.dish}</span>
+                  <button onclick="openRatingModal('${item.dish.replace(/'/g, "\\'")}')" class="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-amber-500 hover:text-white transition">
+                    ${myRating ? 'Muokkaa' : 'Arvioi'}
+                  </button>
+                </div>
+
+                <!-- AINESOSAT + NÄYTÄ LISÄÄ / VÄHEMMÄN -PAINIKE -->
+                <div class="mt-1">
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400 inline"><strong>Ainesosat:</strong> ${displayedIngredients}</p>
+                  ${showToggleBtn ? `<button onclick="toggleIngredients('${dishUniqueId}')" class="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline ml-1 inline">${isExpanded ? 'Näytä vähemmän' : 'Näytä lisää'}</button>` : ''}
+                </div>
+
+                <!-- ENERGIA / RAVINTOARVOT NÄKYVÄT AINA -->
+                ${nutrientsText ? `<p class="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 mt-1.5 bg-emerald-50 dark:bg-emerald-950/40 p-1.5 rounded-lg border border-emerald-100 dark:border-emerald-900/50">📊 ${nutrientsText}</p>` : ''}
+
+                <div class="flex items-center gap-2 mt-2 flex-wrap">
+                  ${badgeHtml}
+                  ${myTag}
+                  ${porkWarning}
+                </div>
+              </div>
+            `;
+          });
+
+          mealsHtml += `
+            <div class="mb-3 last:mb-0">
+              <div class="text-xs font-bold uppercase text-brand-600 dark:text-brand-400 mb-1.5">${meal.meal_name}</div>
+              ${dishesHtml || '<p class="text-xs text-slate-400 italic">Ei ruokia listattuna.</p>'}
+            </div>
+          `;
+        });
+
+        card.innerHTML = `
+          <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">${day.date}</span>
+              <h2 class="text-lg font-bold text-slate-900 dark:text-white leading-tight">${day.menu_date}</h2>
+            </div>
+            ${isToday ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-brand-500 text-white">TÄNÄÄN</span>` : ''}
           </div>
-          ${isToday ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-brand-500 text-white">TÄNÄÄN</span>` : ''}
-        </div>
-
-        <div class="p-4 flex-1 flex flex-col gap-4">
-          <div>
-            <div class="flex items-center gap-1.5 text-xs font-bold uppercase text-amber-600 dark:text-amber-400 mb-1 px-1">
-              <i data-lucide="utensils-crossed" class="w-3.5 h-3.5"></i>
-              <span>Lounas</span>
-            </div>
-            <div class="flex flex-col">
-              ${lounasDishes.map(d => createDishItemHtml(d, dayData.dateStr)).join('')}
-            </div>
+          <div class="p-4 flex-1 flex flex-col gap-3">
+            ${mealsHtml}
           </div>
-
-          <div class="h-px bg-slate-100 dark:bg-slate-700/60 my-0.5"></div>
-
-          <div>
-            <div class="flex items-center gap-1.5 text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400 mb-1 px-1">
-              <i data-lucide="leaf" class="w-3.5 h-3.5"></i>
-              <span>Kasvislounas</span>
-            </div>
-            <div class="flex flex-col">
-              ${kasvisDishes.map(d => createDishItemHtml(d, dayData.dateStr)).join('')}
-            </div>
-          </div>
-        </div>
-      `;
-      return card;
+        `;
+        container.appendChild(card);
+      });
+      lucide.createIcons();
     }
 
     function exportToCSV() {
-      const archive = getStoredArchive();
-      const myRatings = getMyRatings();
-
-      if (archive.length === 0) {
-        alert("Ei tallennettuja ruokalistoja!");
-        return;
-      }
-
-      let csvContent = "\uFEFFPäivämäärä;Viikonpäivä;Tyyppi;Ruoka-aine;Erityisruokavaliot;Yhteisön Keskiarvo;Maku KA;Rakenne KA;Ulkonäkö KA;Arvioiden määrä;Oma Arvio KA\n";
-
-      archive.forEach(item => {
-        const processMeal = (mealStr, type) => {
-          const dishes = splitDishesSmart(mealStr);
-          dishes.forEach(dishFull => {
-            const clean = cleanDishName(dishFull);
-            const key = clean.toLowerCase();
-            const stats = getDishStats(key);
-            const my = myRatings[key];
-
-            const match = dishFull.match(/\(([^)]+)\)/);
-            const diets = match ? match[1] : '';
-
-            const avgAll = stats ? stats.totalAvg : '';
-            const avgM = stats ? stats.avgM : '';
-            const avgR = stats ? stats.avgR : '';
-            const avgU = stats ? stats.avgU : '';
-            const count = stats ? stats.count : '0';
-            const myAvg = my ? my.avg : '';
-
-            csvContent += `"${item.dateStr}";"${item.dayName}";"${type}";"${clean}";"${diets}";"${avgAll}";"${avgM}";"${avgR}";"${avgU}";"${count}";"${myAvg}"\n`;
-          });
-        };
-
-        processMeal(item.lounas, "Lounas");
-        processMeal(item.kasvislounas, "Kasvislounas");
-      });
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `Ruokailu_Arvostelut_${new Date().getFullYear()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      window.location.href = '/api/archive/csv';
     }
 
     function initTheme() {
@@ -600,135 +531,8 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       initTheme();
-      updateArchiveCounter();
-      loadWeekData(1);
+      loadMenuData();
     });
-
-    function getStoredArchive() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : [];
-      } catch (e) { return []; }
-    }
-
-    function saveToArchive(items) {
-      if (!items || items.length === 0) return;
-      const archive = getStoredArchive();
-      items.forEach(newItem => {
-        const existsIndex = archive.findIndex(a => a.dateStr === newItem.dateStr);
-        if (existsIndex >= 0) archive[existsIndex] = newItem;
-        else archive.push(newItem);
-      });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(archive));
-      updateArchiveCounter();
-    }
-
-    function updateArchiveCounter() {
-      const archive = getStoredArchive();
-      document.getElementById('archive-count').textContent = archive.length;
-    }
-
-    function showToast(msg) {
-      const toast = document.getElementById('storage-toast');
-      document.getElementById('storage-toast-msg').textContent = msg;
-      toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 3000);
-    }
-
-    function switchTab(tab) {
-      currentTab = tab;
-      if (tab === 'archive') {
-        updateTabUI('archive');
-        renderArchiveView();
-      } else {
-        loadWeekData(tab);
-      }
-    }
-
-    function renderArchiveView() {
-      const container = document.getElementById('menu-cards-container');
-      const archive = getStoredArchive();
-      container.innerHTML = '';
-      if (!archive || archive.length === 0) {
-        document.getElementById('empty-state').classList.remove('hidden');
-        return;
-      }
-      document.getElementById('empty-state').classList.add('hidden');
-      archive.forEach(dayData => container.appendChild(createCardElement(dayData)));
-      lucide.createIcons();
-    }
-
-    function parseXmlFeed(xmlText) {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-      const items = xmlDoc.querySelectorAll("item");
-      const result = [];
-      const todayStr = new Date().toLocaleDateString('fi-FI');
-      const dayNameMap = { 'ma':'Maanantai','ti':'Tiistai','ke':'Keskiviikko','to':'Torstai','pe':'Perjantai' };
-
-      items.forEach(item => {
-        const title = item.querySelector("title")?.textContent || "";
-        const description = item.querySelector("description")?.textContent || "";
-        const parts = title.trim().split(" ");
-        const dayAbbr = parts[0] || "";
-        const dateStr = parts[1] || title;
-
-        let lounas = "Ei tietoa", kasvislounas = "Ei tietoa";
-        const lines = description.replace(/<br\s*\/?>/gi, '\n').split('\n');
-        lines.forEach(l => {
-          if (l.toLowerCase().startsWith("lounas:")) lounas = l.replace(/^lounas:\s*/i, "");
-          if (l.toLowerCase().startsWith("kasvislounas:")) kasvislounas = l.replace(/^kasvislounas:\s*/i, "");
-        });
-
-        result.push({
-          dateStr,
-          dayName: dayNameMap[dayAbbr.toLowerCase()] || dayAbbr,
-          lounas,
-          kasvislounas,
-          isToday: dateStr === todayStr
-        });
-      });
-      return result;
-    }
-
-    async function loadWeekData(weekIndex) {
-      currentWeekIndex = weekIndex;
-      updateTabUI(weekIndex);
-      document.getElementById('loading-state').classList.remove('hidden');
-      document.getElementById('menu-cards-container').innerHTML = '';
-
-      let xmlText = null;
-      try {
-        const res = await fetch(`${BASE_RSS_URL}${weekIndex}`);
-        if (res.ok) xmlText = await res.text();
-        else throw new Error();
-      } catch (err) {
-        xmlText = SAMPLE_XML_WEEK1;
-      }
-
-      currentWeekData = parseXmlFeed(xmlText);
-      document.getElementById('loading-state').classList.add('hidden');
-      saveToArchive(currentWeekData);
-      renderMenuCards();
-    }
-
-    function renderMenuCards() {
-      const container = document.getElementById('menu-cards-container');
-      container.innerHTML = '';
-      currentWeekData.forEach(dayData => container.appendChild(createCardElement(dayData)));
-      lucide.createIcons();
-    }
-
-    function updateTabUI(activeTab) {
-      ['week-1', 'week-2', 'week-3', 'archive'].forEach(key => {
-        const tab = document.getElementById(`tab-${key}`);
-        if (!tab) return;
-        const isCurrent = (key === `week-${activeTab}`) || (key === activeTab);
-        tab.className = isCurrent 
-          ? "main-tab py-2.5 px-3 rounded-xl font-bold text-sm text-center bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-400 shadow-xs"
-          : "main-tab py-2.5 px-3 rounded-xl font-medium text-sm text-center text-slate-600 dark:text-slate-400";
-      });
-    }
   </script>
 </body>
 </html>
